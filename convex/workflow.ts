@@ -163,6 +163,23 @@ export const tryAuthorize = internalMutation({
     return { authorized: true };
   }
 });
+/** CLI-only recovery for demo after a failed scheduled authorization check.
+ * Never bypasses tryAuthorize; schedules the same full server-side checks.
+ */
+export const retryDemoAuthorization = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const session = await ctx.db.query("sessions").withIndex("by_slug", q => q.eq("slug", "demo")).unique();
+    if (!session?.currentProposalId) throw new Error("DEMO_NOT_FOUND");
+    const proposal = await ctx.db.get(session.currentProposalId);
+    if (!proposal || proposal.status !== "open") throw new Error("NO_OPEN_DEMO_PROPOSAL");
+    await ctx.scheduler.runAfter(0, internal.workflow.tryAuthorize, {
+      sessionId: session._id,
+      proposalId: proposal._id
+    });
+    return { scheduled: true, version: proposal.version };
+  }
+});
 export const fileDispute = mutation({
   args: { sessionId: v.id("sessions"), officerToken: v.string(), obligationCode: v.string(), lineId: v.string(), claimedCents: v.number() },
   handler: async (ctx, args) => {
