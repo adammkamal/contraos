@@ -15,7 +15,7 @@ export function resolveProviderConfig(env: Record<string, string | undefined>):
   const provider: Provider = selected;
   const apiKey = provider === "gemini" ? env.GEMINI_API_KEY : env.ANTHROPIC_API_KEY;
   if (!apiKey) return { error: "NOT_CONFIGURED", message: "Set " + (provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY") + " in Convex environment" };
-  const model = provider === "gemini" ? env.GEMINI_MODEL || "gemini-2.5-flash" : env.ANTHROPIC_MODEL || "claude-haiku-5-5";
+  const model = provider === "gemini" ? env.GEMINI_MODEL || "gemini-3.5-flash-lite" : env.ANTHROPIC_MODEL || "claude-haiku-5-5";
   return { settings: { provider, apiKey, model } };
 }
 

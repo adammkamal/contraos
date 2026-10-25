@@ -6,13 +6,13 @@ const candidate = { candidates: [{ lineId: "L1", claimedCents: 200000, rationale
 
 describe("provider switching", () => {
   it("defaults to Gemini and selects Claude only explicitly", () => {
-    expect(resolveProviderConfig({ GEMINI_API_KEY: "fake" }).settings?.provider).toBe("gemini");
+    expect(resolveProviderConfig({ GEMINI_API_KEY: "fake" }).settings).toMatchObject({ provider: "gemini", model: "gemini-3.5-flash-lite" });
     expect(resolveProviderConfig({ AI_PROVIDER: "anthropic", ANTHROPIC_API_KEY: "fake" }).settings?.provider).toBe("anthropic");
     expect(resolveProviderConfig({ AI_PROVIDER: "anthropic", GEMINI_API_KEY: "fake" }).error).toBe("NOT_CONFIGURED");
     expect(resolveProviderConfig({ AI_PROVIDER: "invalid" }).error).toBe("INVALID_PROVIDER");
   });
   it.each(["gemini", "anthropic"] as const)("parses %s suggestions and keeps secrets out of request bodies", async provider => {
-    const config: ProviderSettings = { provider, model: provider === "gemini" ? "gemini-2.5-flash" : "claude-haiku-5-5", apiKey: "fake-secret" };
+    const config: ProviderSettings = { provider, model: provider === "gemini" ? "gemini-3.5-flash-lite" : "claude-haiku-5-5", apiKey: "fake-secret" };
     let url = "", body = "";
     const mock: typeof fetch = async (input, options) => {
       url = String(input); body = String(options?.body);
@@ -28,12 +28,12 @@ describe("provider switching", () => {
   it("reports provider errors without switching services", async () => {
     let calls = 0;
     const mock: typeof fetch = async () => { calls++; return new Response("{}", { status: 429 }); };
-    const result = await requestInvestigation({ provider: "gemini", model: "gemini-2.5-flash", apiKey: "fake" }, evidence, mock);
+    const result = await requestInvestigation({ provider: "gemini", model: "gemini-3.5-flash-lite", apiKey: "fake" }, evidence, mock);
     expect(result.status).toBe("MODEL_ERROR");
     expect(calls).toBe(1);
   });
   it("rejects invalid model JSON", async () => {
     const mock: typeof fetch = async () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "bad data" }] } }] }), { status: 200 });
-    expect((await requestInvestigation({ provider: "gemini", model: "gemini-2.5-flash", apiKey: "fake" }, evidence, mock)).status).toBe("INVALID_OUTPUT");
+    expect((await requestInvestigation({ provider: "gemini", model: "gemini-3.5-flash-lite", apiKey: "fake" }, evidence, mock)).status).toBe("INVALID_OUTPUT");
   });
 });

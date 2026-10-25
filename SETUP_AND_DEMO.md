@@ -26,7 +26,7 @@ To enable AI evidence investigation, select **one server-side provider** (option
 ```bash
 npx convex env set AI_PROVIDER gemini
 npx convex env set GEMINI_API_KEY
-# Optional: npx convex env set GEMINI_MODEL gemini-2.5-flash
+# Optional: npx convex env set GEMINI_MODEL gemini-3.5-flash-lite
 ```
 
 **Claude final demonstration (only if you have API access):**
