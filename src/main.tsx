@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { ConvexProvider, ConvexReactClient } from "convex/react";
 import App from "./App";
 import "./styles.css";
+import "./visual-system.css";
 const url = import.meta.env.VITE_CONVEX_URL;
 const root = document.getElementById("root")!;
 if (!url) {
