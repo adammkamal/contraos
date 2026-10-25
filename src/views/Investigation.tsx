@@ -61,7 +61,7 @@ export function Investigation({ data, view: v, token, setToken, busy, onRun, onF
         </div>
       </Section>
 
-      <Section title="What the finding rests on" note="A model may propose a discrepancy. The server recomputes the amount from the ledger, and only {filer}'s officer can file it.">
+      <Section title="What the finding rests on" note={`A model may propose a discrepancy. The server recomputes the amount from the ledger, and only ${filer}'s officer can file it.`}>
         <div className="table-wrap">
           <table className="data stack">
             <thead><tr><th>Stage</th><th>By</th><th className="num">Amount</th><th>Basis</th></tr></thead>

@@ -94,7 +94,7 @@ describe("frontend derive() against the real Convex lifecycle", () => {
     expect(reblocked.escalated).toEqual(["A"]);
     const reblockedStory = explainRevision(await snap(), reblocked);
     expect(reblockedStory.rows.find((r) => r.label === "Limit")!.detail).toBe("Atlas delegated limit: $9,000 (v1) → $10,000 (v2) → $9,000 (v3)");
-    expect(reblockedStory.rows.find((r) => r.label === "Outcome")!.text).toBe("A policy change withdrew V2's earlier authorization. Agent A escalated again under v3.");
+    expect(reblockedStory.rows.find((r) => r.label === "Outcome")!.text).toBe("A policy change withdrew V2's earlier authorization. Agent A escalated under v3.");
     await note("V2 blocked again");
 
     // Invariants over every real snapshot taken.
