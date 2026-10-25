@@ -10,7 +10,6 @@ const EXPIRES = Date.UTC(2026, 10, 1, 12, 0, 0);
 const SETUP_KEY = () => process.env.CONTRAOS_SETUP_KEY;
 const now = () => Date.now();
 
-type MutationCtx = Parameters<Parameters<typeof mutation>[0] extends never ? never : any>; // unused; concrete context inferred in handlers
 
 async function readObligations(ctx: any, sessionId: Id<"sessions">): Promise<Obligation[]> {
   const rows = await ctx.db.query("obligations").withIndex("by_session", (q: any) => q.eq("sessionId", sessionId)).collect() as Doc<"obligations">[];
