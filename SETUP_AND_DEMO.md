@@ -19,13 +19,25 @@ Configure a 32+-character setup secret, never committed or pasted into Git:
 npx convex env set CONTRAOS_SETUP_KEY "<locally-generated-random-secret>"
 ```
 
-To enable genuine AI evidence investigation (optional for deterministic fallback), configure the model key as a *Convex backend* environment variable:
+To enable AI evidence investigation, select **one server-side provider** (optional; deterministic validation remains available without AI).
+
+**Gemini free-tier testing (synthetic evidence only):**
 
 ```bash
-npx convex env set ANTHROPIC_API_KEY "<your-private-provider-key>"
+npx convex env set AI_PROVIDER gemini
+npx convex env set GEMINI_API_KEY
+# Optional: npx convex env set GEMINI_MODEL gemini-2.5-flash
 ```
 
-The source defaults to a provider model identifier; if that identifier is not enabled for your account, set `ANTHROPIC_MODEL` in the Convex environment to a model you can access. No provider key goes into a Vite environment variable.
+**Claude final demonstration (only if you have API access):**
+
+```bash
+npx convex env set AI_PROVIDER anthropic
+npx convex env set ANTHROPIC_API_KEY
+# Optional: npx convex env set ANTHROPIC_MODEL claude-haiku-5-5
+```
+
+No frontend changes are needed to switch providers. AI_PROVIDER defaults to gemini, and provider errors do **not** fall back automatically to the paid provider. Keep keys in Convex server environment variables, not Vite or Git. The Company C officer secret is required to initiate investigation. Google free-tier input may be used for product improvement, so **never use real financial data** in this demo.
 
 In a second terminal:
 

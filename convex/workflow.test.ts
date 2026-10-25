@@ -18,6 +18,8 @@ describe("ContraOS live-state authorization invariants", () => {
     vi.setSystemTime(new Date("2026-10-25T05:30:00Z"));
     vi.stubEnv("CONTRAOS_SETUP_KEY", setupKey);
     vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("AI_PROVIDER", "gemini");
   });
   afterEach(() => {
     vi.unstubAllEnvs();
