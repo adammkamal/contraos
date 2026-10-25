@@ -71,7 +71,15 @@ export function validateProposal(terms: ProposalTerms, obligations: Obligation[]
   if (terms.hasDisputeExclusions !== fresh.hasDisputeExclusions) throw new Error("EVIDENCE_MISMATCH");
   if (CODES.some(code => terms.positions.find(p => p.company === code)?.cents !== fresh.positions.find(p => p.company === code)?.cents)) throw new Error("STALE_POSITION");
   validateTransfers(terms.transfers, fresh.positions);
-  if (JSON.stringify(terms.transfers) !== JSON.stringify(fresh.transfers)) throw new Error("TRANSFER_CHANGED");
+  // Convex canonicalizes persisted object keys. Compare typed fields, not JSON text.
+  // This deliberately retains the deterministic transfer order and exact amounts.
+  if (terms.transfers.length !== fresh.transfers.length ||
+      terms.transfers.some((t, i) =>
+        t.from !== fresh.transfers[i].from ||
+        t.to !== fresh.transfers[i].to ||
+        t.cents !== fresh.transfers[i].cents)) {
+    throw new Error("TRANSFER_CHANGED");
+  }
 }
 export function evaluatePolicy(policy: PolicyTerms | null, terms: ProposalTerms, now: number): string[] {
   if (!policy) return ["POLICY_NOT_GRANTED"];

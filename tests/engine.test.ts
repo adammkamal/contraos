@@ -33,6 +33,27 @@ describe("financial and policy invariants", () => {
     const changed = obligations.map(o => o.code === "O3" ? { ...o, disputedCents: 200000 } : o);
     expect(() => validateProposal({ ...old, obligationCodes: obligations.map(o => o.code), settleBy: policy.settleBy }, changed)).toThrow();
   });
+
+  it("accepts Convex-style reordered object fields but rejects actual transfer changes", () => {
+    const calculated = calculate(obligations);
+    const terms = {
+      ...calculated,
+      obligationCodes: obligations.map(o => o.code),
+      settleBy: policy.settleBy,
+      transfers: calculated.transfers.map(t => ({ cents: t.cents, to: t.to, from: t.from }))
+    };
+    // Equivalent objects can serialize differently even though each transfer is identical.
+    expect(JSON.stringify(terms.transfers)).not.toBe(JSON.stringify(calculated.transfers));
+    expect(() => validateProposal(terms, obligations)).not.toThrow();
+    expect(() => validateProposal({
+      ...terms,
+      transfers: terms.transfers.map((t, i) => i === 0 ? { ...t, cents: t.cents + 1 } : t)
+    }, obligations)).toThrow();
+    expect(() => validateProposal({
+      ...terms,
+      transfers: terms.transfers.map((t, i) => i === 0 ? { ...t, from: "C" as const } : t)
+    }, obligations)).toThrow();
+  });
   it("confirms the source-backed $2000 shortfall only", () => {
     const invoice = [{ quantity: 100, unitPriceCents: 5000 }];
     const delivery = [{ received: 60, periodComplete: true }];
