@@ -6,6 +6,20 @@ export type ProviderResult =
   | { status: "OK"; candidates: Suggestion[] }
   | { status: "NETWORK_ERROR" | "MODEL_ERROR" | "INVALID_OUTPUT"; message: string };
 
+/**
+ * Credential hygiene at the configuration boundary. Values pasted into environment settings often carry a trailing
+ * carriage return or newline (Windows shells), which makes fetch reject the header before any request is sent.
+ * Only leading/trailing whitespace is removed; characters inside the credential are never altered. A credential that is
+ * empty after trimming, or that contains control or non-ASCII characters, is refused BEFORE any request is built.
+ * The returned reasons never include the credential.
+ */
+export function normalizeApiKey(raw: string | undefined): { ok: true; key: string } | { ok: false; reason: "EMPTY" | "INVALID_CHARACTERS" } {
+  const key = (raw ?? "").replace(/^\s+|\s+$/g, "");
+  if (key.length === 0) return { ok: false, reason: "EMPTY" };
+  if (/[^\x21-\x7e ]/.test(key)) return { ok: false, reason: "INVALID_CHARACTERS" };
+  return { ok: true, key };
+}
+
 export function resolveProviderConfig(env: Record<string, string | undefined>):
     { settings?: ProviderSettings; error?: string; message?: string } {
   const selected = (env.AI_PROVIDER || "gemini").trim().toLowerCase();
@@ -13,8 +27,11 @@ export function resolveProviderConfig(env: Record<string, string | undefined>):
     return { error: "INVALID_PROVIDER", message: "Set AI_PROVIDER to gemini or anthropic in Convex environment" };
   }
   const provider: Provider = selected;
-  const apiKey = provider === "gemini" ? env.GEMINI_API_KEY : env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { error: "NOT_CONFIGURED", message: "Set " + (provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY") + " in Convex environment" };
+  const name = provider === "gemini" ? "GEMINI_API_KEY" : "ANTHROPIC_API_KEY";
+  const normalized = normalizeApiKey(provider === "gemini" ? env.GEMINI_API_KEY : env.ANTHROPIC_API_KEY);
+  if (!normalized.ok && normalized.reason === "EMPTY") return { error: "NOT_CONFIGURED", message: "Set " + name + " in Convex environment" };
+  if (!normalized.ok) return { error: "INVALID_CREDENTIAL", message: name + " contains characters that cannot be sent in an HTTP header. Re-enter it without line breaks or control characters." };
+  const apiKey = normalized.key;
   const model = provider === "gemini" ? env.GEMINI_MODEL || "gemini-3.5-flash-lite" : env.ANTHROPIC_MODEL || "claude-haiku-5-5";
   return { settings: { provider, apiKey, model } };
 }
