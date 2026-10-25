@@ -17,6 +17,7 @@ describe("ContraOS live-state authorization invariants", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-25T05:30:00Z"));
     vi.stubEnv("CONTRAOS_SETUP_KEY", setupKey);
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
   });
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -101,6 +102,21 @@ describe("ContraOS live-state authorization invariants", () => {
     expect(data.decisions.find(d => d.proposalId === data.session.currentProposalId && d.company === "A")).toMatchObject({
       decision: "escalate", reasons: ["PAYMENT_LIMIT_EXCEEDED"], policyVersion: 3,
     });
+  });
+
+  it("rejects unauthorized AI investigations before any model request", async () => {
+    const { t, seed } = scenario();
+    const ids = await seed();
+    await expect(t.action(api.investigate.investigate, {
+      sessionId: ids.sessionId, officerToken: tokens.A,
+    })).rejects.toThrow("C_OFFICER_REQUIRED");
+    await expect(t.action(api.investigate.investigate, {
+      sessionId: ids.sessionId, officerToken: "invalid-company-C-officer-token",
+    })).rejects.toThrow("C_OFFICER_REQUIRED");
+    const valid = await t.action(api.investigate.investigate, {
+      sessionId: ids.sessionId, officerToken: tokens.C,
+    });
+    expect(valid.status).toBe("NOT_CONFIGURED");
   });
 
   it("rejects duplicate disputes, unrelated actor, and superseded V1 decisions", async () => {
