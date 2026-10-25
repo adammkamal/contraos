@@ -31,7 +31,7 @@ describe("rendered views show no unresolved placeholders", () => {
 describe("Investigation section note", () => {
   it("names the company whose officer can file, using the stored company name", () => {
     const out = html("evidence", fixture("authorized"));
-    expect(out).toContain("and only Cedar (C)&#x27;s officer can file it.");
+    expect(out).toContain("so Cedar&#x27;s officer is allowed to file it.");
     expect(out).not.toContain("{filer}");
   });
 
@@ -41,7 +41,7 @@ describe("Investigation section note", () => {
     const out = html("evidence", data);
     expect(out).toContain("gemini-3.5-flash-lite");
     expect(out).toContain("Supported");
-    expect(out).toContain("and only Cedar (C)&#x27;s officer can file it.");
+    expect(out).toContain("so Cedar&#x27;s officer is allowed to file it.");
     expect(out).not.toMatch(PLACEHOLDER);
   });
 });
