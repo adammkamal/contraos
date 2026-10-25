@@ -171,7 +171,7 @@ export function explainRevision(data: Session, v: View): RevisionStory {
     const tail = v.phase === "authorized" && v.consistent ? `; the server then authorized V${current.version}.` : v.phase === "pending_authorization" ? "; the server has not yet recorded authorization." : ".";
     parts.push(`Agent ${and(accepted)} re-evaluated under ${under(accepted)} and accepted${tail}`);
   }
-  if (again.length) parts.push(`Agent ${and(again)} escalated again under ${under(again)}.`);
+  if (again.length) parts.push(`Agent ${and(again)} escalated under ${under(again)}.`);
   if (waiting.length) parts.push(`Agent ${and(waiting)} has not yet decided under ${under(waiting)}.`);
   if (parts.length) rows.push({ label: "Outcome", text: parts.join(" ") });
 

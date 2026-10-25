@@ -102,7 +102,7 @@ describe("explainRevision: authorization withdrawn by a later policy change", ()
     const s = story("reopened");
     expect(s.v.reopened).toBe(true);
     expect(row(s, "Limit")!.detail).toBe("Atlas delegated limit: $9,000 (v1) → $10,000 (v2) → $9,000 (v3)");
-    expect(row(s, "Outcome")!.text).toBe("A policy change withdrew V2's earlier authorization. Agent A escalated again under v3.");
+    expect(row(s, "Outcome")!.text).toBe("A policy change withdrew V2's earlier authorization. Agent A escalated under v3.");
   });
 
   it("says the agent has not yet decided while the stale decision is pending", () => {
@@ -203,5 +203,46 @@ describe('history note', () => {
   it('never prints a "Not stated" disclaimer for omitted history', () => {
     const rendered = JSON.stringify(explainRevision(fixture('noaudit') as never, derive(fixture('noaudit') as never)).rows);
     expect(rendered).not.toMatch(/not stated|retained audit/i);
+  });
+});
+
+describe("explainRevision: a cap lowered when the agent had never escalated", () => {
+  // Mirrors the live counterfactual: A accepted V2 under $11,000, then its officer lowered the cap to $9,000.
+  const counterfactual = () => story("authorized", (d) => {
+    d.proposals[1].status = "open";
+    d.policies.find((p: any) => p.company === "A" && p.version === 1).maxNetPayCents = 1_100_000;
+    d.policies.find((p: any) => p.company === "A" && p.version === 2).maxNetPayCents = 900_000;
+    const T = d.audit[0].createdAt;
+    d.audit = d.audit.filter((e: any) => !/^A independently (escalated|accepted) V2|granted policy v2/.test(e.message));
+    d.audit.push(
+      { _id: "x1", _creationTime: T + 14000, createdAt: T + 14000, kind: "authorization_invalidated", message: "V2 requires fresh authorization after policy change", actor: "system", sessionId: "s" },
+      { _id: "x2", _creationTime: T + 14001, createdAt: T + 14001, kind: "policy_granted", message: "Company A granted policy v2", actor: "A officer", sessionId: "s" },
+      { _id: "x3", _creationTime: T + 14030, createdAt: T + 14030, kind: "agent_decided", message: "A independently escalated V2: PAYMENT_LIMIT_EXCEEDED", actor: "Agent A", sessionId: "s" },
+    );
+    d.decisions = d.decisions.filter((x: any) => !(x.proposalId === "p2" && x.company === "A"));
+    d.decisions.push({ _id: "dA2", _creationTime: T + 14030, proposalId: "p2", company: "A", decision: "escalate", reasons: ["PAYMENT_LIMIT_EXCEEDED"], policyVersion: 2, decidedAt: T + 14030 });
+  });
+
+  it("says escalated under the current policy version, without claiming a repeat", () => {
+    const s = counterfactual();
+    expect(s.v.phase).toBe("blocked");
+    expect(row(s, "Outcome")!.text).toBe("A policy change withdrew V2's earlier authorization. Agent A escalated under v2.");
+    expect(row(s, "Outcome")!.text).not.toMatch(/again/i);
+  });
+
+  it("does not invent an earlier escalation in the limit row either", () => {
+    const s = counterfactual();
+    expect(row(s, "Limit")!.text).toBe("Atlas (A)'s officer changed its limit after the dispute.");
+    expect(row(s, "Limit")!.detail).toBe("Atlas delegated limit: $11,000 (v1) → $9,000 (v2)");
+  });
+
+  it("takes the version from the current policy, not a fixed string", () => {
+    expect(row(story("reopened"), "Outcome")!.text).toContain("Agent A escalated under v3.");
+  });
+
+  it("never says escalated again in any state", () => {
+    for (const scene of ["v1", "blocked", "stale", "pending", "authorized", "noaudit", "reopened", "reopenedwait"]) {
+      expect(JSON.stringify(story(scene).story.rows)).not.toMatch(/escalated again/i);
+    }
   });
 });
