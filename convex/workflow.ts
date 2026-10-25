@@ -117,6 +117,16 @@ export const grantPolicy = mutation({
       allowedObligations: ["O1", "O2", "O3"], allowDisputeExclusions: true,
       expiresAt: EXPIRES, settleBy: DAYS, createdAt: now()
     });
+    // A new policy grant changes the authorization basis of an existing proposal.
+    // Invalidate current authorization in the same transaction, BEFORE scheduling
+    // a new decision. The proposal is not executable while policy rechecks run.
+    const proposal = await ctx.db.get(session.currentProposalId);
+    if (!proposal || proposal.status === "superseded") throw new Error("INVALID_CURRENT_PROPOSAL");
+    if (proposal.status === "authorized") {
+      await ctx.db.patch(proposal._id, { status: "open" });
+      await audit(ctx, args.sessionId, "authorization_invalidated",
+        "V" + proposal.version + " requires fresh authorization after policy change", "system");
+    }
     await audit(ctx, args.sessionId, "policy_granted", "Company " + company + " granted policy v" + version, company + " officer");
     await scheduleDecisions(ctx, args.sessionId, session.currentProposalId, [company]);
     return { company, version };
@@ -126,7 +136,7 @@ export const agentDecide = internalMutation({
   args: { sessionId: v.id("sessions"), proposalId: v.id("proposals"), company: companyV },
   handler: async (ctx, { sessionId, proposalId, company }) => {
     const [session, proposal] = await Promise.all([ctx.db.get(sessionId), ctx.db.get(proposalId)]);
-    if (!session || session.currentProposalId !== proposalId || !proposal || proposal.status === "superseded") return { ignored: "STALE_PROPOSAL" };
+    if (!session || session.currentProposalId !== proposalId || !proposal || proposal.status !== "open") return { ignored: "PROPOSAL_NOT_OPEN" };
     const policy = await currentPolicy(ctx, sessionId, company);
     const terms = { obligationCodes: proposal.obligationCodes, positions: proposal.positions, transfers: proposal.transfers, hasDisputeExclusions: proposal.hasDisputeExclusions, settleBy: proposal.settleBy };
     const reasons = evaluatePolicy(policy as PolicyTerms | null, terms, now());
