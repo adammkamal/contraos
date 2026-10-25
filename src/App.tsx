@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
-import { Activity, FileSearch, ShieldCheck } from "lucide-react";
 import { api } from "../convex/_generated/api";
 import { CODES, TARGET, derive, disputeReadiness, formContext, type Code } from "./model";
 import { Field } from "./ui";
@@ -9,23 +8,11 @@ import { Officer } from "./views/Officer";
 import { Overview } from "./views/Overview";
 
 type Tab = "overview" | "evidence" | "officer";
-
-function Mark() {
-  return (
-    <svg className="mark" width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-      <path d="M11 4.5 4.5 16.5h13L11 4.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
-      <circle cx="11" cy="4.5" r="2.2" fill="currentColor" />
-      <circle cx="4.5" cy="16.5" r="2.2" fill="currentColor" />
-      <circle cx="17.5" cy="16.5" r="2.2" fill="currentColor" />
-    </svg>
-  );
-}
-
-const TITLES: Record<Tab, { title: string; sub: string }> = {
-  overview: { title: "Settlement", sub: "Three companies, three independent agents, one proposal at a time." },
-  evidence: { title: "Evidence", sub: "Source-linked invoice and delivery records behind the dispute." },
-  officer: { title: "Officer portal", sub: "Authority and disputes belong to each company's human officer." },
-};
+const TABS: Array<{ id: Tab; label: string }> = [
+  { id: "overview", label: "Overview" },
+  { id: "evidence", label: "Investigation" },
+  { id: "officer", label: "Officer portal" },
+];
 
 export default function App() {
   const [slug, setSlug] = useState(new URLSearchParams(window.location.search).get("session") || "demo");
@@ -45,6 +32,17 @@ export default function App() {
   const dispute = useMutation(api.workflow.fileDispute);
   const manual = useMutation(api.investigate.manualCandidate);
   const investigate = useAction(api.investigate.investigate);
+
+  // A success notice describes one action; it should not follow the user around the app.
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 6000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  const go = (next: Tab) => {
+    setNotice("");
+    setTab(next);
+  };
 
   const work = async (label: string, fn: () => Promise<unknown>) => {
     setBusy(label);
@@ -74,7 +72,7 @@ export default function App() {
     // Pre-fill with what the current proposal requires, so the officer reviews an exact figure.
     const need = view?.current?.positions.find((p) => p.company === c)?.cents ?? 0;
     selectCompany(c, Math.abs(need));
-    setTab("officer");
+    go("officer");
   };
 
   const submitPolicy = async () => {
@@ -91,40 +89,24 @@ export default function App() {
     await dispute({ sessionId: data.session.id, officerToken: token, obligationCode: TARGET.obligation, lineId: TARGET.line, claimedCents: readiness.cents });
   };
 
-  const nav: Array<{ id: Tab; label: string; icon: typeof Activity; alert?: boolean }> = [
-    { id: "overview", label: "Overview", icon: Activity },
-    { id: "evidence", label: "Investigation", icon: FileSearch },
-    { id: "officer", label: "Officer portal", icon: ShieldCheck, alert: view?.phase === "blocked" },
-  ];
-
   return (
-    <div className="app">
-      <aside className="rail">
-        <div className="brand"><Mark /><span>ContraOS</span></div>
-        <nav aria-label="Primary">
-          {nav.map(({ id, label, icon: Icon, alert }) => (
-            <button key={id} aria-current={tab === id ? "page" : undefined} onClick={() => setTab(id)}>
-              <Icon size={16} strokeWidth={1.75} aria-hidden="true" />
-              <span>{label}</span>
-              {alert && <i className="nav-alert" title="Authorization needed" />}
-            </button>
-          ))}
-        </nav>
-        <div className="rail-foot">
-          <span className={"live " + (data ? "on" : "")}><i />{data === undefined ? "Connecting" : data ? "Live from Convex" : "No session"}</span>
-          <span>Synthetic demonstration. No payments are executed.</span>
+    <>
+      <header className="top">
+        <div className="top-in">
+          <span className="brand">ContraOS</span>
+          <nav className="tabs" aria-label="Primary">
+            {TABS.map(({ id, label }) => (
+              <button key={id} aria-current={tab === id ? "page" : undefined} className={id === "officer" && view?.phase === "blocked" ? "need" : undefined} onClick={() => go(id)}>
+                {label}
+                {id === "officer" && view?.phase === "blocked" && <span className="sr"> (authorization needed)</span>}
+              </button>
+            ))}
+          </nav>
+          <span className="top-meta">{data ? <>Session <span className="mono">{data.session.slug}</span></> : data === undefined ? "Connecting…" : "No session"}</span>
         </div>
-      </aside>
+      </header>
 
       <main>
-        <header className="page-head">
-          <div>
-            <h1>{TITLES[tab].title}</h1>
-            <p>{TITLES[tab].sub}</p>
-          </div>
-          {data && <span className="session">Session <b className="mono">{data.session.slug}</b></span>}
-        </header>
-
         {error && <div className="toast error" role="alert"><span>{error}</span><button aria-label="Dismiss" onClick={() => setError("")}>×</button></div>}
         {notice && <div className="toast ok" role="status"><span>{notice}</span><button aria-label="Dismiss" onClick={() => setNotice("")}>×</button></div>}
 
@@ -132,24 +114,22 @@ export default function App() {
           <p className="muted">Waiting for the Convex deployment…</p>
         ) : !data || !view ? (
           <section className="setup">
-            <h2>Initialize a session</h2>
-            <p className="muted">Creates the synthetic three-company scenario. Setup needs the server-configured administrator key and a separate secret for each officer.</p>
+            <h1>Initialize a session</h1>
+            <p>Creates the synthetic three-company scenario. Setup needs the server-configured administrator key and a separate secret for each officer.</p>
             <Field label="Session slug"><input value={slug} onChange={(e) => setSlug(e.target.value)} /></Field>
             <Field label="Setup administrator key"><input type="password" value={setupKey} onChange={(e) => setSetupKey(e.target.value)} /></Field>
-            <div className="grid3">
-              {CODES.map((c) => (
-                <Field key={c} label={`Officer ${c} secret (16+ characters)`}>
-                  <input type="password" value={secrets[c]} onChange={(e) => setSecrets((s) => ({ ...s, [c]: e.target.value }))} />
-                </Field>
-              ))}
-            </div>
+            {CODES.map((c) => (
+              <Field key={c} label={`Officer ${c} secret (16+ characters)`}>
+                <input type="password" value={secrets[c]} onChange={(e) => setSecrets((s) => ({ ...s, [c]: e.target.value }))} />
+              </Field>
+            ))}
             <div className="btn-row">
               <button className="btn primary" disabled={!!busy} onClick={() => work("Workspace setup", () => initialize({ slug, setupKey, officerA: secrets.A, officerB: secrets.B, officerC: secrets.C }))}>Initialize session</button>
             </div>
           </section>
         ) : (
           <>
-            {tab === "overview" && <Overview data={data} view={view} onReviewAuthority={reviewAuthority} onOpenEvidence={() => setTab("evidence")} />}
+            {tab === "overview" && <Overview data={data} view={view} onReviewAuthority={reviewAuthority} onOpenEvidence={() => go("evidence")} />}
             {tab === "evidence" && (
               <Investigation
                 data={data}
@@ -164,7 +144,7 @@ export default function App() {
                 onFile={() => {
                   selectCompany("C");
                   setInvestigatorToken("");
-                  setTab("officer");
+                  go("officer");
                 }}
               />
             )}
@@ -186,7 +166,8 @@ export default function App() {
             )}
           </>
         )}
+        <footer className="foot">Synthetic demonstration.</footer>
       </main>
-    </div>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import { TARGET, derive, disputeReadiness, ledger, money, type Session } from "../model";
-import { Field, Section, StateMark } from "../ui";
+import { shortName } from "../story";
+import { Field, Section, State } from "../ui";
 
 type View = ReturnType<typeof derive>;
 
@@ -9,118 +10,98 @@ export function Investigation({ data, view: v, token, setToken, busy, onRun, onF
   const L = ledger(data, TARGET.obligation);
   const target = L.rows.find((r) => r.lineId === TARGET.line);
   const readiness = disputeReadiness(data);
+  const obligation = data.obligations.find((o) => o.code === TARGET.obligation);
+  const nm = (c: Parameters<typeof shortName>[1]) => shortName(v.names, c);
+  const filer = nm(obligation?.debtor ?? "C");
   const cand = [...data.candidates].sort((a, b) => a.createdAt - b.createdAt).at(-1);
   const manual = cand?.modelName === "MANUAL_FALLBACK";
-  const obligation = data.obligations.find((o) => o.code === TARGET.obligation);
   const matches = !!cand && cand.computedCents !== undefined && cand.claimedCents === cand.computedCents;
+  const hold = data.disputes.find((d) => d.obligationCode === TARGET.obligation && d.lineId === TARGET.line);
+  const shortfall = L.rows.reduce((total, r) => total + r.shortCents, 0);
 
   return (
     <>
-      <div className="band band-plain">
-        <div className="band-main">
-          <h2>{readiness.ok && target ? `${target.shortUnits} units billed but not received` : "The ledger does not support a shortfall"}</h2>
-          <p>
-            {L.invoiceId} against {L.deliveryId}, obligation {TARGET.obligation}
-            {obligation ? `: Company ${obligation.debtor} owes Company ${obligation.creditor} ${money(obligation.amountCents)}` : ""}. {readiness.ok ? "Only a Company C officer can turn a validated finding into a dispute." : readiness.reason}
+      <header className="head">
+        <div>
+          <h1>{L.invoiceId ? `${L.invoiceId} against ${L.deliveryId}` : "Evidence"}</h1>
+          <p className="lead-line">
+            {readiness.ok && target
+              ? <><b>{target.shortUnits} of {target.quantity} units on line {target.lineId} were not received</b>, a shortfall of {money(readiness.cents)}.</>
+              : <><b className="warn">The ledger does not support a shortfall.</b> {readiness.reason}</>}
+            {obligation && <> Obligation {obligation.code}: {nm(obligation.debtor)} owes {nm(obligation.creditor)} {money(obligation.amountCents)}.</>}
           </p>
         </div>
-        <div className="band-figure">
-          <span className="label">Shortfall per ledger</span>
-          <strong className="figure">{readiness.ok ? money(readiness.cents) : "—"}</strong>
-          <span className="caveat">{v.disputeFiled ? `Filed: ${money(v.holdCents)} hold recorded` : "Not filed yet"}</span>
-        </div>
-      </div>
+        {!hold && readiness.ok && <button className="btn primary" disabled={!!busy} onClick={onFile}>Continue to dispute filing</button>}
+      </header>
 
-      <div className="split even">
-        <Section title={`Invoice ${L.invoiceId ?? ""}`} note={`Issued by Company ${obligation?.creditor ?? ""}`}>
-          <div className="table-wrap">
-            <table className="data doc">
-              <thead><tr><th>Line</th><th className="num">Qty</th><th className="num">Unit price</th><th className="num">Amount</th><th>Source</th></tr></thead>
-              <tbody>
-                {L.rows.map((r) => (
-                  <tr key={r.lineId} className={r.lineId === TARGET.line ? "target" : undefined}>
-                    <td>{r.lineId}</td>
-                    <td className="num mono">{r.quantity}</td>
-                    <td className="num mono">{money(r.unitPriceCents)}</td>
-                    <td className="num mono">{money(r.amountCents)}</td>
-                    <td className="mono muted">{r.sourceRef}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr><td colSpan={3}>Invoice total</td><td className="num mono">{money(L.invoiceTotal)}</td><td /></tr></tfoot>
-            </table>
-          </div>
-        </Section>
-        <Section title={`Receiving report ${L.deliveryId ?? ""}`} note={`Company ${obligation?.debtor ?? ""} receiving ledger`}>
-          <div className="table-wrap">
-            <table className="data doc">
-              <thead><tr><th>Line</th><th className="num">Billed</th><th className="num">Received</th><th className="num">Short</th><th>Source</th></tr></thead>
-              <tbody>
-                {L.rows.map((r) => (
-                  <tr key={r.lineId} className={r.lineId === TARGET.line ? "target" : undefined}>
-                    <td>{r.lineId}</td>
-                    <td className="num mono">{r.quantity}</td>
-                    <td className="num mono">{r.delivery ? r.delivery.received : "—"}</td>
-                    <td className={"num mono" + (r.shortUnits ? " warn" : "")}>{r.shortUnits ? `−${r.shortUnits}` : "0"}</td>
-                    <td className="mono muted">{r.delivery?.sourceRef ?? "no record"}</td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot><tr><td colSpan={4}>Delivery period</td><td>{L.periodComplete ? "Complete" : "Not complete"}</td></tr></tfoot>
-            </table>
-          </div>
-        </Section>
-      </div>
-
-      <Section title="Finding and validation" note="A model may propose a discrepancy. Trusted server code recomputes the supported amount from the ledger.">
-        <div className="verify">
-          <div className="verify-col">
-            <span className="tag tag-model">{manual ? "Manual fallback" : "Model-proposed"}</span>
-            {!cand ? (
-              <p className="muted">No finding has been proposed yet. Run the investigator with the Company C officer credential.</p>
-            ) : (
-              <>
-                <span className="source">{manual ? "Prepared by an officer; this is not an AI result" : cand.modelName}</span>
-                <strong className="figure md">{money(cand.claimedCents)}</strong>
-                <p>{cand.rationale}</p>
-                <ul className="refs">{cand.sourceRefs.map((r) => <li key={r} className="mono">{r}</li>)}</ul>
-              </>
-            )}
-          </div>
-          <div className="verify-col">
-            <span className="tag tag-verified">Backend-validated</span>
-            {cand ? (
-              <>
-                <span className="source"><StateMark tone={cand.status === "SUPPORTED" ? "ok" : "warn"} label={cand.status === "SUPPORTED" ? "Supported" : cand.status.toLowerCase().replaceAll("_", " ")} /></span>
-                <strong className="figure md">{cand.computedCents === undefined ? "Not supported" : money(cand.computedCents)}</strong>
-                {readiness.ok && target && <p className="mono">{target.shortUnits} units × {money(target.unitPriceCents)} = {money(target.shortCents)}</p>}
-                <ul className="checks">
-                  <li data-ok={cand.status === "SUPPORTED"}>Server status: {cand.status.toLowerCase().replaceAll("_", " ")}</li>
-                  <li data-ok={matches}>Claimed amount equals recomputed amount</li>
-                  <li data-ok={L.periodComplete}>Delivery period complete</li>
-                </ul>
-              </>
-            ) : (
-              <>
-                <span className="source">Ledger arithmetic only</span>
-                <strong className="figure md">{readiness.ok ? money(readiness.cents) : "—"}</strong>
-                {readiness.ok && target ? <p className="mono">{target.shortUnits} units × {money(target.unitPriceCents)}</p> : <p className="warn">{readiness.reason}</p>}
-                <p className="muted">Not yet validated as a candidate. The server revalidates the evidence when a dispute is filed.</p>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="actions">
-          <Field label="Company C officer credential" hint="Required to run the investigator. The model cannot file disputes.">
-            <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Officer secret (16+ characters)" />
-          </Field>
-          <div className="btn-row">
-            <button className="btn primary" disabled={!!busy || token.length < 16} onClick={onRun}>{busy === "AI investigation" ? "Investigating…" : "Run AI investigator"}</button>
-            <button className="btn" disabled={!!busy || v.disputeFiled} onClick={onFile}>{v.disputeFiled ? "Dispute already filed" : "Continue to dispute filing"}</button>
-          </div>
+      <Section title="Reconciliation" note="Billed quantities from the invoice against the receiving report, line by line.">
+        <div className="table-wrap">
+          <table className="data stack">
+            <thead>
+              <tr><th>Line</th><th className="num">Billed qty</th><th className="num">Unit price</th><th className="num">Billed</th><th className="num">Received</th><th className="num">Short</th><th className="num">Shortfall</th><th>Sources</th></tr>
+            </thead>
+            <tbody>
+              {L.rows.map((r) => (
+                <tr key={r.lineId} className={r.lineId === TARGET.line ? "target" : undefined}>
+                  <td className="full">{r.lineId}</td>
+                  <td className="num" data-label="Billed qty">{r.quantity}</td>
+                  <td className="num" data-label="Unit price">{money(r.unitPriceCents)}</td>
+                  <td className="num" data-label="Billed">{money(r.amountCents)}</td>
+                  <td className="num" data-label="Received">{r.delivery ? r.delivery.received : "—"}</td>
+                  <td className="num" data-label="Short">{r.shortUnits ? <span className="st st-warn">{r.shortUnits}</span> : <span className="dim">0</span>}</td>
+                  <td className="num strong" data-label="Shortfall">{r.shortCents ? money(r.shortCents) : <span className="dim">—</span>}</td>
+                  <td className="full"><div className="refs"><span>{r.sourceRef}</span>{r.delivery && <span>{r.delivery.sourceRef}</span>}</div></td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr><td className="full">Total</td><td /><td /><td className="num" data-label="Billed">{money(L.invoiceTotal)}</td><td /><td /><td className="num" data-label="Shortfall">{money(shortfall)}</td><td className="dim" data-label="Delivery period">{L.periodComplete ? "Complete" : "Not complete"}</td></tr>
+            </tfoot>
+          </table>
         </div>
       </Section>
+
+      <Section title="What the finding rests on" note="A model may propose a discrepancy. The server recomputes the amount from the ledger, and only {filer}'s officer can file it.">
+        <div className="table-wrap">
+          <table className="data stack">
+            <thead><tr><th>Stage</th><th>By</th><th className="num">Amount</th><th>Basis</th></tr></thead>
+            <tbody>
+              <tr>
+                <td className="full stage">{manual ? "Entered manually" : "Proposed by model"}</td>
+                <td className="full" data-label="By">{!cand ? <span className="dim">No finding yet</span> : manual ? <>An officer, not an AI result</> : <span className="mono">{cand.modelName}</span>}</td>
+                <td className="num full" data-label="Amount">{cand ? money(cand.claimedCents) : "—"}</td>
+                <td className="full basis">{cand ? <><p>{cand.rationale}</p><div className="refs">{cand.sourceRefs.map((r) => <span key={r}>{r}</span>)}</div></> : <p className="muted">Run the investigator, or prepare a manual entry as Company C.</p>}</td>
+              </tr>
+              <tr>
+                <td className="full stage">Validated by the server</td>
+                <td className="full" data-label="By">{cand ? <State tone={cand.status === "SUPPORTED" ? "ok" : "warn"} label={cand.status === "SUPPORTED" ? "Supported" : cand.status.toLowerCase().replaceAll("_", " ")} /> : <span className="dim">Not run</span>}</td>
+                <td className="num full" data-label="Amount">{cand ? (cand.computedCents === undefined ? "Not supported" : money(cand.computedCents)) : "—"}</td>
+                <td className="full basis">
+                  {cand && target && readiness.ok
+                    ? <p>{target.shortUnits} × {money(target.unitPriceCents)} = {money(target.shortCents)}. {L.periodComplete ? "Delivery period complete." : "Delivery period not complete."} {matches ? "Matches the proposed amount." : "Does not match the proposed amount."}</p>
+                    : <p className="muted">{readiness.ok && target ? `Ledger arithmetic gives ${money(target.shortCents)}; it is not a validated finding until proposed. The server revalidates when a dispute is filed.` : readiness.reason}</p>}
+                </td>
+              </tr>
+              <tr>
+                <td className="full stage">Dispute filed</td>
+                <td className="full" data-label="By">{hold ? `${nm(hold.filedBy)} officer` : <span className="dim">Not filed</span>}</td>
+                <td className="num full" data-label="Amount">{hold ? money(hold.cents) : "—"}</td>
+                <td className="full basis"><p className={hold ? undefined : "muted"}>{hold ? `Hold on ${hold.obligationCode} line ${hold.lineId}. The proposal that was current was superseded.` : `Only ${filer}'s officer can file this dispute.`}</p></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      <details className="fold">
+        <summary>Run the AI investigator</summary>
+        <div className="form">
+          <Field label={`${filer} officer credential`} hint="Required. The model can only propose; it cannot file a dispute.">
+            <input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Officer secret (16+ characters)" />
+          </Field>
+          <div className="btn-row"><button className="btn" disabled={!!busy || token.length < 16} onClick={onRun}>{busy === "AI investigation" ? "Investigating…" : "Run investigator"}</button></div>
+        </div>
+      </details>
     </>
   );
 }

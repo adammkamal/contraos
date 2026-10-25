@@ -292,3 +292,13 @@ export function disputeReadiness(data: Session): DisputeReadiness {
   if (row.shortCents <= 0) return fail("Received quantity covers the billed quantity; there is no shortfall to dispute.");
   return { ok: true, cents: row.shortCents, reason: "" };
 }
+
+/**
+ * How far a position is past its delegated limit, in cents. Positive means over the maximum payment
+ * (or under the minimum receipt); zero or negative is the remaining margin. Undefined when no limit is set.
+ */
+export function limitGap(position: number, policy: Policy | undefined): number | undefined {
+  const r = requirement(position, policy);
+  if (r.bound === undefined) return undefined;
+  return r.kind === "pay" ? r.amount - r.bound : r.bound - r.amount;
+}

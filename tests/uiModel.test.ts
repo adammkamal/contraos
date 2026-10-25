@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authorizationHistory, derive, disputeReadiness, formContext, grossCents, interpretDecision, latestPolicies, ledger, money, readingNote, signedMoney, type Code, type Session } from "../src/model";
+import { authorizationHistory, derive, disputeReadiness, formContext, grossCents, interpretDecision, latestPolicies, ledger, limitGap, money, readingNote, signedMoney, type Code, type Session } from "../src/model";
 
 type Scene = "blocked" | "stale" | "authorized";
 const T = 1_700_000_000_000;
@@ -292,5 +292,29 @@ describe("V1 supersession history", () => {
     const v = derive(data);
     expect(v.steps[0]).toMatchObject({ label: "V1 awaiting authorization", state: "current" });
     expect(v.phase).toBe("evaluating");
+  });
+});
+
+describe('limitGap', () => {
+  const a = (cents: number) => pol('A', 1, cents) as never;
+  const b = (cents: number) => pol('B', 1, cents) as never;
+
+  it('is positive by exactly how far a payer is over its maximum', () => {
+    expect(limitGap(-1_000_000, a(900_000))).toBe(100_000);
+  });
+
+  it('is zero at the limit and negative with margin to spare', () => {
+    expect(limitGap(-1_000_000, a(1_000_000))).toBe(0);
+    expect(limitGap(-800_000, a(900_000))).toBe(-100_000);
+  });
+
+  it('is positive by how far a receiver is below its minimum', () => {
+    expect(limitGap(300_000, b(400_000))).toBe(100_000);
+    expect(limitGap(500_000, b(400_000))).toBe(-100_000);
+  });
+
+  it('is undefined when no limit has been granted', () => {
+    expect(limitGap(-1_000_000, undefined)).toBeUndefined();
+    expect(limitGap(500_000, { company: 'B', version: 1 } as never)).toBeUndefined();
   });
 });
