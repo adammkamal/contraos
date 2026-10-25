@@ -35,6 +35,8 @@ export default function App() {
   const dispute = useMutation(api.workflow.fileDispute);
   const manual = useMutation(api.investigate.manualCandidate);
   const investigate = useAction(api.investigate.investigate);
+  const investigateTools = useAction(api.investigate.investigateWithTools);
+  const runs = useQuery(api.investigate.runsForSession, data ? { sessionId: data.session.id } : "skip");
 
   // "Updated" is when this client last received a snapshot from Convex.
   useEffect(() => { if (data) setUpdated(new Date()); }, [data]);
@@ -173,6 +175,18 @@ export default function App() {
                   onRun={() => work("AI investigation", async () => {
                     const r = await investigate({ sessionId: data.session.id, officerToken: investigatorToken });
                     if (r.status !== "CANDIDATES_SAVED") throw new Error(r.message || r.status);
+                  })}
+                  runs={runs}
+                  onRunTools={() => work("Tool-using investigation", async () => {
+                    const r = await investigateTools({ sessionId: data.session.id, officerToken: investigatorToken });
+                    if (r.status === "CANDIDATE_SAVED") return;
+                    // Every non-supported outcome is shown as what it was; none falls back to another investigator.
+                    const said: Record<string, string> = {
+                      NO_FINDING: "The investigator found no supported discrepancy. The run is recorded in Investigation activity.",
+                      NO_SUPPORTED_CANDIDATE: "The model's finding was not supported by the ledger. See Investigation activity.",
+                      STALE_EVIDENCE: "The records changed during the run, so the result was marked stale. Run it again.",
+                    };
+                    throw new Error(said[r.status] ?? r.message ?? r.status);
                   })}
                   onFile={() => {
                     selectCompany("C");

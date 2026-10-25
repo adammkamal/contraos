@@ -1,11 +1,12 @@
 import { TARGET, disputeReadiness, ledger, money, type Code, type Session } from "../model";
 import { type View } from "../story";
+import { activityRows, runStatusLabel, type RunsView } from "../investigationActivity";
 import { Btn, Card, Field, Footer, PageHead, Pill, firstName } from "../ui";
 
 const clock = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 
-export function Investigation({ data, view: v, token, setToken, busy, onRun, onFile }: {
-  data: Session; view: View; token: string; setToken: (t: string) => void; busy: string; onRun: () => void; onFile: () => void;
+export function Investigation({ data, view: v, token, setToken, busy, onRun, onRunTools, onFile, runs }: {
+  data: Session; view: View; token: string; setToken: (t: string) => void; busy: string; onRun: () => void; onRunTools?: () => void; onFile: () => void; runs?: RunsView;
 }) {
   const L = ledger(data, TARGET.obligation);
   const target = L.rows.find((r) => r.lineId === TARGET.line);
@@ -15,6 +16,8 @@ export function Investigation({ data, view: v, token, setToken, busy, onRun, onF
   const F = (c: Code) => firstName(v.names, c);
   const cand = [...data.candidates].sort((a, b) => a.createdAt - b.createdAt).at(-1);
   const manual = cand?.modelName === "MANUAL_FALLBACK";
+  const toolRun = cand?.mode === "tool_using_gemini";
+  const stale = cand?.status === "STALE_EVIDENCE";
   const supported = cand?.status === "SUPPORTED";
   const matches = !!cand && cand.computedCents !== undefined && cand.claimedCents === cand.computedCents;
   const hold = data.disputes.find((d) => d.obligationCode === TARGET.obligation && d.lineId === TARGET.line);
@@ -100,7 +103,7 @@ export function Investigation({ data, view: v, token, setToken, busy, onRun, onF
           <h2 className="section__title">What the model proposed, and what the server checked</h2>
           <div className="cmp">
             <div className="cmp__col">
-              <span className="cmp__who">{!cand ? "No finding yet" : manual ? "Manual entry · not an AI result" : "Recorded provider finding"}</span>
+              <span className="cmp__who">{!cand ? "No finding yet" : manual ? "Manual entry · not an AI result" : toolRun ? "Tool-using Gemini run" : cand.mode?.startsWith("single_pass") ? "Single-pass provider finding" : "Recorded provider finding"}</span>
               {cand && !manual && <span className="mono">{cand.modelName}</span>}
               <span className="cmp__amt num">{cand ? `${money(cand.claimedCents)} claimed` : "—"}</span>
               <span className="cmp__note">{cand ? cand.rationale : "Run the investigator, or prepare a manual entry as Company C."}</span>
@@ -117,7 +120,7 @@ export function Investigation({ data, view: v, token, setToken, busy, onRun, onF
                   <li className="check">Every ledger value is in range</li>
                   <li className="check">Both source lines exist</li>
                 </ul>
-              ) : <span className="cmp__note">{cand ? `Server status: ${cand.status.toLowerCase().replaceAll("_", " ")}` : "No candidate to validate."}</span>}
+              ) : <span className="cmp__note">{cand ? (stale ? "The records changed while the investigation ran, so this result is marked stale and cannot be filed. Run it again." : `Server status: ${cand.status.toLowerCase().replaceAll("_", " ")}`) : "No candidate to validate."}</span>}
             </div>
           </div>
         </Card>
@@ -127,12 +130,53 @@ export function Investigation({ data, view: v, token, setToken, busy, onRun, onF
             <input id="inv-cred" className="field__input" type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Officer secret (16+ characters)" />
           </Field>
           <div className="btn-row">
-            <Btn island disabled={!!busy || token.length < 16} onClick={onRun}>{busy === "AI investigation" ? "Investigating…" : "Run AI investigator"}</Btn>
+            {onRunTools && <Btn island disabled={!!busy || token.length < 16} onClick={onRunTools}>{busy === "Tool-using investigation" ? "Investigating…" : "Run tool-using investigator"}</Btn>}
+            <Btn kind={onRunTools ? "outline" : "primary"} island={!onRunTools} disabled={!!busy || token.length < 16} onClick={onRun}>{busy === "AI investigation" ? "Investigating…" : onRunTools ? "Run single-pass investigator" : "Run AI investigator"}</Btn>
             <Btn kind="outline" disabled={!!busy || !!hold || !readiness.ok} onClick={onFile}>{hold ? "Dispute already filed" : "Go to dispute filing"}</Btn>
           </div>
         </Card>
       </div>
+      {runs && <Activity runs={runs} supported={supported} disputeFiled={!!hold} filer={filer} />}
       <Footer names={v.names} />
     </>
+  );
+}
+
+/** Compact, record-driven activity of the latest tool-using run. Every row is a persisted event; nothing is invented. */
+function Activity({ runs, supported, disputeFiled, filer }: { runs: RunsView; supported: boolean; disputeFiled: boolean; filer: string }) {
+  const run = runs.runs[0];
+  if (!run) {
+    return (
+      <Card label="Investigation activity">
+        <h2 className="section__title">Investigation activity</h2>
+        <p className="section__sub">No tool-using run has been recorded for this session yet. Single-pass and manual results show above, labelled as such.</p>
+      </Card>
+    );
+  }
+  const events = runs.events.filter((e) => e.runId === run.id);
+  const rows = activityRows(events, { disputeFiled, filer, supported: supported && run.status === "completed" });
+  const st = runStatusLabel[run.status];
+  return (
+    <Card label="Investigation activity">
+      <div className="head-row">
+        <h2 className="section__title">Investigation activity</h2>
+        <Pill tone={st.tone}>{st.label}</Pill>
+      </div>
+      <p className="section__sub">
+        Tool-using Gemini run · <span className="mono">{run.model}</span> · {run.turns} model turn{run.turns === 1 ? "" : "s"}, {run.toolRequests} tool request{run.toolRequests === 1 ? "" : "s"}
+        {run.finishedAt !== undefined ? ` · ${((run.finishedAt - run.startedAt) / 1000).toFixed(1)} s` : ""}
+        {run.totalTokens ? ` · ${run.totalTokens.toLocaleString("en-US")} tokens (provider-reported)` : ""}
+        {runs.runs.length > 1 ? ` · ${runs.runs.length - 1} earlier run${runs.runs.length === 2 ? "" : "s"} recorded` : ""}
+      </p>
+      <ul className="audit" aria-label="Recorded tool activity">
+        {rows.map((r) => (
+          <li key={r.key} className={"audit__item" + (r.tone === "warn" ? " audit__item--warn" : r.tone === "info" ? " audit__item--navy" : "")}>
+            <i className="audit__dot" aria-hidden="true" />
+            <div><p className="audit__title">{r.title}</p><p className="audit__note">{r.detail}</p></div>
+          </li>
+        ))}
+      </ul>
+      <p className="audit__note">Recorded by the server from the model's actual requests: tool names, validated arguments and references only. Prompts, credentials and provider content are not stored.</p>
+    </Card>
   );
 }

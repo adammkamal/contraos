@@ -51,8 +51,27 @@ export default defineSchema({
   evidenceCandidates: defineTable({
     sessionId: v.id("sessions"), obligationCode: v.string(), lineId: v.string(),
     claimedCents: v.number(), status: v.string(), computedCents: v.optional(v.number()),
-    rationale: v.string(), sourceRefs: v.array(v.string()), modelName: v.string(), createdAt: v.number()
+    rationale: v.string(), sourceRefs: v.array(v.string()), modelName: v.string(), createdAt: v.number(),
+    // How the finding was produced: tool_using_gemini | single_pass_<provider> | manual_fallback. Rows from before run tracking have none.
+    mode: v.optional(v.string()), runId: v.optional(v.id("investigationRuns"))
   }).index("by_session", ["sessionId"]),
+  // One bounded, model-directed investigation. Sanitized facts only: no prompts, credentials, raw provider content or reasoning metadata.
+  investigationRuns: defineTable({
+    sessionId: v.id("sessions"), mode: v.literal("tool_using_gemini"), provider: v.string(), model: v.string(),
+    status: v.union(v.literal("running"), v.literal("completed"), v.literal("no_finding"), v.literal("stale"), v.literal("failed"), v.literal("interrupted")),
+    stopReason: v.optional(v.string()), evidenceVersion: v.number(), fingerprint: v.string(),
+    turns: v.number(), toolRequests: v.number(), candidateId: v.optional(v.id("evidenceCandidates")),
+    // Provider-reported token counts (numbers only), when the provider returned them.
+    promptTokens: v.optional(v.number()), outputTokens: v.optional(v.number()), thoughtsTokens: v.optional(v.number()), totalTokens: v.optional(v.number()),
+    startedAt: v.number(), finishedAt: v.optional(v.number())
+  }).index("by_session", ["sessionId"]),
+  investigationEvents: defineTable({
+    sessionId: v.id("sessions"), runId: v.id("investigationRuns"), seq: v.number(),
+    kind: v.union(v.literal("tool_requested"), v.literal("tool_result"), v.literal("candidate_proposed"), v.literal("no_finding_proposed"), v.literal("validation"), v.literal("stopped")),
+    toolName: v.optional(v.string()), args: v.optional(v.record(v.string(), v.union(v.string(), v.number()))),
+    allowed: v.optional(v.boolean()), reason: v.optional(v.string()), refs: v.optional(v.array(v.string())),
+    detail: v.optional(v.string()), at: v.number()
+  }).index("by_run", ["runId", "seq"]),
   auditEvents: defineTable({
     sessionId: v.id("sessions"), kind: v.string(), message: v.string(),
     actor: v.string(), createdAt: v.number()
