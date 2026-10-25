@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { Activity, ArrowDownRight, ArrowRight, ArrowUpRight, Check, CheckCircle2, ChevronDown, CircleAlert, ClipboardList, Database, FileSearch, FileText, Fingerprint, KeyRound, Layers3, LockKeyhole, Play, RefreshCcw, ShieldCheck, Sparkles, TrendingDown, Users, Wallet, X } from "lucide-react";
+import { Activity, ArrowDownRight, ArrowRight, Check, CheckCircle2, CircleAlert, ClipboardList, Database, FileSearch, FileText, Fingerprint, KeyRound, Layers3, LockKeyhole, RefreshCcw, ShieldCheck, Sparkles, Wallet, X } from "lucide-react";
 type Code = "A" | "B" | "C";
 const money = (n:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n/100);
 function pill(status:string){const s=status.toLowerCase();return <span className={"pill "+(s.includes("accept")||s.includes("authoriz")||s.includes("supported")?"pill-ok":s.includes("escal")||s.includes("blocked")||s.includes("open")?"pill-warn":s.includes("supersed")?"pill-muted":"pill-soft")}>{s.replaceAll("_"," ")}</span>}
